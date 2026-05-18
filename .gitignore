@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.egg-info/
+dist/
+*.egg
+.venv/
+venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+
+# Frontend
+bilibili_tools/frontend/node_modules/
+bilibili_tools/frontend/dist/
+
+# Sensitive config
+bilibili_tools/backend/config.json
+
+# Downloads / temp
+downloads/
+temp/
+
+# OS
+.DS_Store
+Thumbs.db

@@ -1,0 +1,13 @@
+{
+  "download_type": "video",
+  "audio_format": "mp3",
+  "video_format": "mp4",
+  "max_concurrent_downloads": 3,
+  "download_dir": "~/Downloads",
+  "bili_sessdata": "",
+  "bili_jct": "",
+  "bili_dedeuserid": "",
+  "llm_base_url": "https://api.deepseek.com",
+  "llm_api_key": "",
+  "llm_model": "deepseek-chat"
+}
