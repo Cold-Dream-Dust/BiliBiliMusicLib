@@ -97,6 +97,34 @@ export const useDownloadStore = defineStore('download', () => {
     }
   }
 
+  /** 从服务端同步所有任务到本地 store（用于收藏夹批量下载后刷新） */
+  async function syncFromServer() {
+    try {
+      const { data } = await api.get('/downloads')
+      const serverTasks = data?.tasks || []
+      for (const st of serverTasks) {
+        const exists = tasks.value.find(t => t.serverId === st.id)
+        if (!exists) {
+          tasks.value.push({
+            id: ++taskIdCounter,
+            bvid: st.bvid || '',
+            title: st.title || st.bvid || '',
+            thumbnail: st.thumbnail || '',
+            status: st.status,
+            progress: st.progress || 0,
+            speed: st.speed || '',
+            error: st.error || '',
+            file_path: st.file_path || '',
+            paused: st.paused || false,
+            serverId: st.id,
+          })
+        }
+      }
+    } catch (e) {
+      console.error('同步任务列表失败:', e)
+    }
+  }
+
   function pauseTask(id) {
     const t = tasks.value.find(t => t.id === id)
     if (t) t.paused = true
@@ -157,6 +185,8 @@ export const useDownloadStore = defineStore('download', () => {
     removeTask,
     openFile,
     openFolder,
+    startPolling,
     stopPolling,
+    syncFromServer,
   }
 })

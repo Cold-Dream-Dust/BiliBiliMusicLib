@@ -6,6 +6,7 @@
       <div class="nav-tabs">
         <router-link to="/" class="nav-tab">🔍 搜索</router-link>
         <router-link to="/downloads" class="nav-tab">📥 下载管理</router-link>
+        <router-link to="/favorites" class="nav-tab">⭐ 收藏夹</router-link>
         <router-link to="/llm" class="nav-tab">🤖 LLM 助手</router-link>
         <router-link to="/settings" class="nav-tab">⚙️ 设置</router-link>
       </div>

@@ -69,7 +69,7 @@ async def proxy_image(url: str = Query(..., description="原始图片URL")):
         "User-Agent": BILIBILI_USER_AGENT,
         "Referer": "https://www.bilibili.com/",
     }
-    async with httpx.AsyncClient(timeout=15) as client:
+    async with httpx.AsyncClient(timeout=15, trust_env=False) as client:
         try:
             resp = await client.get(url, headers=headers)
             resp.raise_for_status()

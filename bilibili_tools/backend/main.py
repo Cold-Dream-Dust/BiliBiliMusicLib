@@ -31,10 +31,20 @@ app.add_middleware(
 from api.search import router as search_router
 from api.download import router as download_router
 from api.llm import router as llm_router
+from api.favorites import router as favorites_router
 
 app.include_router(search_router, prefix="/api")
 app.include_router(download_router, prefix="/api")
 app.include_router(llm_router, prefix="/api")
+app.include_router(favorites_router, prefix="/api")
+
+
+# ── 启动事件 ──────────────────────────────────────────
+@app.on_event("startup")
+async def startup_event():
+    """加载持久化数据"""
+    from services import favorites_service as fs
+    fs.load()
 
 
 # ── 健康检查 ──────────────────────────────────────────

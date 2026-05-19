@@ -22,6 +22,7 @@ bilibili_tools/backend/config.json
 
 # Runtime data
 bilibili_tools/backend/tasks.json
+bilibili_tools/backend/favorites.json
 
 # Downloads / temp
 downloads/

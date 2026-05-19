@@ -46,6 +46,42 @@ export async function llmIdentify(query) {
   return data
 }
 
+// ── 收藏夹 ────────────────────────────
+export async function getFavoriteFolders() {
+  const { data } = await api.get('/favorites/folders')
+  return data
+}
+
+export async function createFavoriteFolder(name) {
+  const { data } = await api.post('/favorites/folders', { name })
+  return data
+}
+
+export async function renameFavoriteFolder(folderId, name) {
+  const { data } = await api.put(`/favorites/folders/${folderId}`, { name })
+  return data
+}
+
+export async function deleteFavoriteFolder(folderId) {
+  const { data } = await api.delete(`/favorites/folders/${folderId}`)
+  return data
+}
+
+export async function addFavoriteItem(folderId, bvid, title, pic) {
+  const { data } = await api.post(`/favorites/folders/${folderId}/items`, { bvid, title, pic })
+  return data
+}
+
+export async function removeFavoriteItem(folderId, itemId) {
+  const { data } = await api.delete(`/favorites/folders/${folderId}/items/${itemId}`)
+  return data
+}
+
+export async function downloadAllFavorites(folderId) {
+  const { data } = await api.post(`/favorites/folders/${folderId}/download-all`)
+  return data
+}
+
 // ── 配置 ──────────────────────────────
 export async function getConfig() {
   const { data } = await api.get('/config')

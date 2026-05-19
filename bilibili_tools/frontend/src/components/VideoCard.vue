@@ -16,6 +16,14 @@
         <span v-if="video.play || video.view">{{ formatCount(video.play || video.view) }} 播放</span>
       </div>
     </div>
+    <!-- 左下角收藏按钮 -->
+    <button
+      :class="['fav-btn', { favorited: isFavorited || favClicked }]"
+      @click.stop="handleFavorite"
+      :title="isFavorited ? '已收藏' : '收藏到收藏夹'"
+    >
+      {{ isFavorited ? '★' : favClicked ? '★' : '☆' }}
+    </button>
     <!-- 右下角一键下载按钮 -->
     <button
       :class="['download-btn', { clicked: btnClicked }]"
@@ -33,11 +41,13 @@ import { proxyImageUrl } from '../utils/api'
 
 const props = defineProps({
   video: { type: Object, required: true },
+  isFavorited: { type: Boolean, default: false },
 })
-const emit = defineEmits(['download', 'click'])
+const emit = defineEmits(['download', 'click', 'favorite'])
 
 const coverUrl = computed(() => proxyImageUrl(props.video.pic || props.video.cover))
 const btnClicked = ref(false)
+const favClicked = ref(false)
 
 function handleDownload() {
   if (btnClicked.value) return
@@ -45,6 +55,12 @@ function handleDownload() {
   emit('download', props.video)
   // 1秒后恢复
   setTimeout(() => { btnClicked.value = false }, 1200)
+}
+
+function handleFavorite() {
+  favClicked.value = true
+  emit('favorite', props.video)
+  setTimeout(() => { favClicked.value = false }, 1200)
 }
 
 function formatDuration(sec) {
@@ -170,5 +186,42 @@ function formatCount(n) {
 .download-btn.clicked:hover {
   background: var(--success);
   transform: scale(0.85);
+}
+
+/* ── 收藏按钮（左下角）── */
+.fav-btn {
+  position: absolute;
+  bottom: 10px;
+  left: 10px;
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(0,0,0,0.55);
+  color: #ffc107;
+  font-size: 1.1rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: all 0.2s ease;
+  z-index: 2;
+}
+
+.fav-btn.favorited {
+  color: #ffc107;
+  background: rgba(0,0,0,0.75);
+  transform: scale(1.2);
+  opacity: 1;
+}
+
+.video-card:hover .fav-btn {
+  opacity: 1;
+}
+
+.fav-btn:hover {
+  background: rgba(0,0,0,0.75);
+  transform: scale(1.15);
 }
 </style>

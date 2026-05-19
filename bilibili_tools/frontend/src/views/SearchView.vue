@@ -38,7 +38,7 @@
       <div class="results-area">
         <div v-if="store.loading" class="loading">搜索中...</div>
         <div v-else-if="store.results.length>0" class="results-grid">
-          <VideoCard v-for="v in store.results" :key="v.bvid" :video="v" @download="quickDownload" />
+          <VideoCard v-for="v in store.results" :key="v.bvid" :video="v" :isFavorited="favStore.isBvidFavorited(v.bvid)" @download="quickDownload" @favorite="openFavPicker" />
         </div>
         <div v-else-if="store.searched" class="empty">未找到相关结果</div>
       </div>
@@ -50,8 +50,52 @@
       <button class="btn btn-page" :disabled="!store.hasMore" @click="store.goPage(store.page+1)">▶</button>
     </div>
 
+    <!-- 收藏夹选择弹窗 -->
+    <div v-if="favPicker.visible" class="modal-overlay" @click.self="closeFavPicker">
+      <div class="modal-card fav-picker-card">
+        <h3>⭐ 收藏到...</h3>
+        <p class="fav-picker-title">{{ favPicker.video?.title?.slice(0, 30) || '...' }}</p>
+
+        <!-- 已有收藏夹列表 -->
+        <div v-if="favStore.folders.length" class="fav-picker-list">
+          <button
+            v-for="f in favStore.folders"
+            :key="f.id"
+            class="fav-picker-folder"
+            :disabled="favPicker.saving"
+            @click="addToFolder(f.id)"
+          >
+            <span class="fp-name">📁 {{ f.name }}</span>
+            <span class="fp-count">{{ f.items?.length || 0 }}</span>
+          </button>
+        </div>
+        <div v-else class="fav-picker-empty">暂无收藏夹</div>
+
+        <!-- 快速创建 -->
+        <div class="fav-picker-create">
+          <input
+            v-model="favPicker.newName"
+            class="modal-input"
+            placeholder="新建收藏夹..."
+            maxlength="50"
+            @keyup.enter="createAndAdd"
+          />
+          <button class="btn btn-primary" :disabled="!favPicker.newName.trim() || favPicker.saving" @click="createAndAdd">
+            新建并收藏
+          </button>
+        </div>
+
+        <div class="modal-actions">
+          <button class="btn btn-secondary" @click="closeFavPicker">取消</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Toast -->
+    <div v-if="favToast" class="toast" :class="favToast.type">{{ favToast.message }}</div>
+
     <footer class="search-footer">
-      <a href="https://space.bilibili.com/544689323" target="_blank">B站 @九月沉</a><span class="sep">|</span>
+      <a href="https://space.bilibili.com/544689323" target="_blank">@九月沉</a><span class="sep">|</span>
       <a href="https://github.com/Cold-Dream-Dust/BiliBiliMusicLib" target="_blank">GitHub</a>
     </footer>
   </div>
@@ -62,9 +106,11 @@ import { ref, reactive, computed, onMounted } from 'vue'
 import VideoCard from '../components/VideoCard.vue'
 import { useSearchStore } from '../stores/search'
 import { useDownloadStore } from '../stores/download'
+import { useFavoritesStore } from '../stores/favorites'
 
 const store = useSearchStore()
 const downloadStore = useDownloadStore()
+const favStore = useFavoritesStore()
 const inputQuery = ref(store.query||'')
 const upQuery = ref('')
 const showSettings = ref(false)
@@ -79,7 +125,10 @@ const pageButtons = computed(()=>{
   return a
 })
 
-onMounted(()=>{if(store.query)inputQuery.value=store.query})
+onMounted(()=>{
+  if(store.query)inputQuery.value=store.query
+  favStore.fetchFolders()  // 加载收藏状态用于标记已收藏视频
+})
 
 function doSearch(){
   let q=inputQuery.value.trim()
@@ -89,6 +138,62 @@ function doSearch(){
 }
 
 function quickDownload(video){downloadStore.addTask(video)}
+
+// ── 收藏夹选择 ──
+const favPicker = reactive({
+  visible: false,
+  video: null,
+  newName: '',
+  saving: false,
+})
+const favToast = ref(null)
+
+function openFavPicker(video) {
+  favStore.fetchFolders()
+  favPicker.video = video
+  favPicker.newName = ''
+  favPicker.visible = true
+}
+
+function closeFavPicker() {
+  favPicker.visible = false
+  favPicker.video = null
+}
+
+async function addToFolder(folderId) {
+  if (favPicker.saving) return
+  favPicker.saving = true
+  try {
+    await favStore.addItem(folderId, favPicker.video)
+    showFavToast('已收藏 ✅')
+    closeFavPicker()
+  } catch (e) {
+    showFavToast(e.response?.data?.detail || '收藏失败', 'error')
+  } finally {
+    favPicker.saving = false
+  }
+}
+
+async function createAndAdd() {
+  const name = favPicker.newName.trim()
+  if (!name || favPicker.saving) return
+  favPicker.saving = true
+  try {
+    const folder = await favStore.createFolder(name)
+    await favStore.addItem(folder.id, favPicker.video)
+    showFavToast('已收藏 ✅')
+    closeFavPicker()
+  } catch (e) {
+    showFavToast(e.response?.data?.detail || '操作失败', 'error')
+  } finally {
+    favPicker.saving = false
+  }
+}
+
+function showFavToast(msg, type = 'success') {
+  favToast.value = { message: msg, type }
+  setTimeout(() => { favToast.value = null }, 2500)
+}
 </script>
 
 <style scoped>
@@ -123,4 +228,28 @@ function quickDownload(video){downloadStore.addTask(video)}
 .btn-secondary{background:var(--bg-card);color:var(--text-primary);border:1px solid var(--border)}
 .btn-secondary:hover{background:var(--bg-hover)}
 .btn-secondary.active{border-color:var(--accent);color:var(--accent)}
+
+/* ── 收藏弹窗 ── */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.6);display:flex;align-items:center;justify-content:center;z-index:100}
+.modal-card{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:24px;width:420px;max-width:90vw}
+.modal-card h3{margin-bottom:8px;font-size:1.1rem}
+.modal-input{width:100%;padding:10px 14px;border:1px solid var(--border);border-radius:6px;background:var(--bg-secondary);color:var(--text-primary);font-size:.9rem;outline:none;box-sizing:border-box}
+.modal-input:focus{border-color:var(--accent)}
+.modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:12px}
+.fav-picker-title{font-size:.82rem;color:var(--text-secondary);margin-bottom:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fav-picker-list{display:flex;flex-direction:column;gap:6px;max-height:200px;overflow-y:auto;margin-bottom:12px}
+.fav-picker-folder{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border:1px solid var(--border);border-radius:6px;background:var(--bg-secondary);color:var(--text-primary);font-size:.9rem;cursor:pointer;transition:all .15s;width:100%}
+.fav-picker-folder:hover:not(:disabled){border-color:var(--accent);background:var(--bg-hover)}
+.fav-picker-folder:disabled{opacity:.5;cursor:not-allowed}
+.fp-count{font-size:.78rem;color:var(--text-secondary);background:var(--bg-card);padding:2px 8px;border-radius:8px}
+.fav-picker-empty{text-align:center;color:var(--text-secondary);padding:16px 0;font-size:.88rem}
+.fav-picker-create{display:flex;gap:8px;margin-bottom:8px}
+.fav-picker-create .modal-input{flex:1}
+.fav-picker-create .btn{white-space:nowrap}
+
+/* ── Toast ── */
+.toast{position:fixed;bottom:30px;left:50%;transform:translateX(-50%);padding:10px 22px;border-radius:8px;font-size:.9rem;z-index:200;animation:toastIn .3s ease;box-shadow:0 4px 16px rgba(0,0,0,0.4)}
+.toast.success{background:var(--success);color:#fff}
+.toast.error{background:var(--danger);color:#fff}
+@keyframes toastIn{from{opacity:0;transform:translateX(-50%) translateY(10px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
 </style>

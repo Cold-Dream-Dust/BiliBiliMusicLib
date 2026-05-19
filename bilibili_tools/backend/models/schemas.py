@@ -139,3 +139,40 @@ class ConfigUpdateRequest(BaseModel):
     llm_base_url: Optional[str] = None
     llm_api_key: Optional[str] = None
     llm_model: Optional[str] = None
+
+
+# ── 收藏夹 ────────────────────────────────────────────
+
+class FavoriteItem(BaseModel):
+    """收藏夹中的单个视频"""
+    id: str                    # 唯一 ID
+    bvid: str
+    title: str
+    pic: str = ""              # 封面图 URL
+    added_at: str = ""         # ISO 时间戳
+
+
+class FavoriteFolder(BaseModel):
+    """收藏夹"""
+    id: str
+    name: str
+    items: list[FavoriteItem] = []
+    created_at: str = ""
+    updated_at: str = ""
+
+
+class FavoriteFolderCreate(BaseModel):
+    """创建收藏夹请求"""
+    name: str = Field(..., min_length=1, max_length=50)
+
+
+class FavoriteFolderUpdate(BaseModel):
+    """更新收藏夹请求"""
+    name: str = Field(..., min_length=1, max_length=50)
+
+
+class FavoriteItemAdd(BaseModel):
+    """添加收藏项请求"""
+    bvid: str
+    title: str
+    pic: str = ""

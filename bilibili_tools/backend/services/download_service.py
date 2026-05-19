@@ -105,7 +105,7 @@ async def _fetch_playinfo(bvid: str) -> Optional[dict]:
     if cookie:
         headers["Cookie"] = cookie
 
-    async with httpx.AsyncClient(timeout=20, follow_redirects=True) as client:
+    async with httpx.AsyncClient(timeout=20, follow_redirects=True, trust_env=False) as client:
         try:
             resp = await client.get(url, headers=headers)
             resp.raise_for_status()
@@ -157,7 +157,7 @@ async def _download_stream(url: str, output_path: str, task: dict) -> bool:
         "User-Agent": BILIBILI_UA,
         "Referer": "https://www.bilibili.com/",
     }
-    async with httpx.AsyncClient(timeout=300, follow_redirects=True) as client:
+    async with httpx.AsyncClient(timeout=300, follow_redirects=True, trust_env=False) as client:
         try:
             async with client.stream("GET", url, headers=headers) as resp:
                 resp.raise_for_status()

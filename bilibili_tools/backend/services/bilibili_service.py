@@ -67,7 +67,11 @@ async def search_bilibili(
         "Referer": "https://www.bilibili.com/",
     }
 
-    async with httpx.AsyncClient(timeout=15) as client:
+    # WBI 签名（B站搜索接口必需）
+    params = _wbi_sign(params)
+
+    # 不使用系统代理（代理可能导致B站API连接失败）
+    async with httpx.AsyncClient(timeout=15, trust_env=False) as client:
         try:
             resp = await client.get(
                 BILIBILI_SEARCH_API,
@@ -76,8 +80,11 @@ async def search_bilibili(
             )
             resp.raise_for_status()
             data = resp.json()
+        except httpx.HTTPStatusError as e:
+            print(f"[BilibiliService] 搜索HTTP错误 {e.response.status_code}: {e.response.text[:200]}")
+            return {"items": [], "total": 0, "has_more": False}
         except Exception as e:
-            print(f"[BilibiliService] 搜索失败: {e}")
+            print(f"[BilibiliService] 搜索失败: {type(e).__name__}: {e}")
             return {"items": [], "total": 0, "has_more": False}
 
     if data.get("code") != 0:
@@ -123,7 +130,7 @@ async def get_video_info(bvid: str) -> Optional[dict]:
         "Referer": f"https://www.bilibili.com/video/{bvid}",
     }
 
-    async with httpx.AsyncClient(timeout=15) as client:
+    async with httpx.AsyncClient(timeout=15, trust_env=False) as client:
         try:
             resp = await client.get(
                 BILIBILI_VIDEO_INFO_API,
