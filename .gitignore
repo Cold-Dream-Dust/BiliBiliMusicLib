@@ -20,6 +20,9 @@ bilibili_tools/frontend/dist/
 # Sensitive config
 bilibili_tools/backend/config.json
 
+# Runtime data
+bilibili_tools/backend/tasks.json
+
 # Downloads / temp
 downloads/
 temp/

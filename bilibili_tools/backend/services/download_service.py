@@ -23,6 +23,39 @@ from config import settings
 # ── 任务存储 ──────────────────────────────────────────
 _tasks: dict[str, dict] = {}
 _semaphore: Optional[asyncio.Semaphore] = None
+_TASKS_FILE = Path(__file__).resolve().parent.parent / "tasks.json"
+
+
+def save_tasks():
+    """持久化任务到 JSON 文件"""
+    try:
+        data = list(_tasks.values())
+        with open(_TASKS_FILE, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        print(f"[DownloadService] 保存任务失败: {e}")
+
+
+def load_tasks():
+    """从 JSON 文件恢复任务"""
+    global _tasks
+    if not _TASKS_FILE.exists():
+        return
+    try:
+        with open(_TASKS_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        for t in data:
+            tid = t.get("id", "")
+            if tid and tid not in _tasks:
+                t["progress"] = 0
+                t["speed"] = ""
+                if t.get("status") in ("active", "pending"):
+                    t["status"] = "failed"
+                    t["error"] = "上次会话中断"
+                _tasks[tid] = t
+        print(f"[DownloadService] 恢复了 {len(_tasks)} 个历史任务")
+    except Exception as e:
+        print(f"[DownloadService] 加载任务失败: {e}")
 
 BILIBILI_UA = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -194,6 +227,7 @@ async def submit_download(
         "paused": False,
     }
     _tasks[task_id] = task
+    save_tasks()
     asyncio.create_task(_run_download(task_id))
     return task_id
 
@@ -244,6 +278,7 @@ async def _run_download(task_id: str) -> None:
                     task["progress"] = 100
                     task["file_path"] = output_file
                     settings.browser_cookies_available = True
+                    save_tasks()
                     print(f"[DownloadService] ✓ 完成: {task['title']}")
                 else:
                     task["status"] = "failed"
@@ -303,6 +338,7 @@ async def _run_download(task_id: str) -> None:
             task["status"] = "failed"
             task["error"] = str(e) if str(e) else "下载异常"
             settings.browser_cookies_available = False
+            save_tasks()
             print(f"[DownloadService] ✗ 异常: {task['title']}: {e}")
 
 
@@ -339,6 +375,7 @@ def cancel_task(task_id: str) -> bool:
     if task and task["status"] in ("pending", "active"):
         task["status"] = "failed"
         task["error"] = "用户取消"
+        save_tasks()
         return True
     return False
 
@@ -347,6 +384,7 @@ def remove_task(task_id: str) -> bool:
     task = _tasks.get(task_id)
     if task and task["status"] in ("done", "failed"):
         del _tasks[task_id]
+        save_tasks()
         return True
     return False
 

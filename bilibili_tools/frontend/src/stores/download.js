@@ -127,9 +127,8 @@ export const useDownloadStore = defineStore('download', () => {
   }
 
   function openFile(task) {
-    // 通过后端 API 打开文件
     if (task.serverId) {
-      window.open(`/api/downloads/${task.serverId}/open-folder`, '_blank')
+      fetch(`/api/file/${task.serverId}`).catch(()=>{})
     }
   }
 

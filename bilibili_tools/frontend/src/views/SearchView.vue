@@ -1,180 +1,126 @@
 <template>
-  <div class="search-view">
+  <div class="search-page">
     <div class="search-header">
-      <input
-        v-model="inputQuery"
-        class="search-input"
-        placeholder="搜索B站视频..."
-        @keyup.enter="doSearch"
-      />
+      <template v-if="searchOpts.upFilter">
+        <input v-model="upQuery" class="search-input up-input" placeholder="UP主名/UID" @keyup.enter="doSearch" />
+        <span class="sep">+</span>
+      </template>
+      <input v-model="inputQuery" class="search-input" placeholder="搜索B站视频..." @keyup.enter="doSearch" />
       <button class="btn btn-primary" @click="doSearch">搜索</button>
-      <button class="btn btn-secondary" @click="$router.push('/llm')">🤖 LLM 辅助</button>
+      <button class="btn btn-secondary" @click="$router.push('/llm')">🤖 AI辅助</button>
+      <button class="btn btn-secondary" :class="{ active: showSettings }" @click="showSettings = !showSettings">⚙ 搜索设置</button>
     </div>
 
-    <!-- 加载中 / 结果 / 空状态 -->
-    <div v-if="store.loading" class="loading">搜索中...</div>
-    <div v-else-if="store.results.length > 0" class="results-grid">
-      <VideoCard
-        v-for="video in store.results"
-        :key="video.bvid"
-        :video="video"
-        @download="quickDownload"
-      />
+    <div v-if="showSettings" class="search-settings-panel">
+      <div class="setting-row">
+        <label>排序</label>
+        <select v-model="searchOpts.sortBy">
+          <option value="relevance">综合</option><option value="views">播放量</option>
+          <option value="date">发布时间</option><option value="duration">时长</option>
+        </select>
+        <select v-model="searchOpts.order">
+          <option value="desc">降序</option><option value="asc">升序</option>
+        </select>
+      </div>
+      <div class="setting-row">
+        <label><input type="checkbox" v-model="searchOpts.upFilter" /> 指定UP主</label>
+        <span class="hint" v-if="searchOpts.upFilter">搜索框将分为 UP主 + 关键词 两段</span>
+      </div>
     </div>
 
-    <div v-else-if="store.searched" class="empty">未找到相关结果</div>
-
-    <!-- 翻页：底部 -->
-    <div v-if="store.results.length > 0" class="pager bottom-pager">
-      <button class="btn btn-page" :disabled="store.page <= 1" @click="store.goPage(store.page - 1)">
-        ◀ 上一页
-      </button>
-      <span class="page-info">{{ store.page }} / {{ store.totalPages || 1 }}</span>
-      <button class="btn btn-page" :disabled="!store.hasMore" @click="store.goPage(store.page + 1)">
-        下一页 ▶
-      </button>
+    <div v-if="store.results.length>0 && !store.loading" class="pager-row">
+      <button class="btn btn-page" :disabled="store.page<=1" @click="store.goPage(store.page-1)">◀</button>
+      <button v-for="p in pageButtons" :key="p" class="btn btn-page-num" :class="{current:p===store.page}" @click="store.goPage(p)">{{p}}</button>
+      <button class="btn btn-page" :disabled="!store.hasMore" @click="store.goPage(store.page+1)">▶</button>
     </div>
+
+    <div class="search-body">
+      <div class="results-area">
+        <div v-if="store.loading" class="loading">搜索中...</div>
+        <div v-else-if="store.results.length>0" class="results-grid">
+          <VideoCard v-for="v in store.results" :key="v.bvid" :video="v" @download="quickDownload" />
+        </div>
+        <div v-else-if="store.searched" class="empty">未找到相关结果</div>
+      </div>
+    </div>
+
+    <div v-if="store.results.length>0 && !store.loading" class="pager-row">
+      <button class="btn btn-page" :disabled="store.page<=1" @click="store.goPage(store.page-1)">◀</button>
+      <button v-for="p in pageButtons" :key="p" class="btn btn-page-num" :class="{current:p===store.page}" @click="store.goPage(p)">{{p}}</button>
+      <button class="btn btn-page" :disabled="!store.hasMore" @click="store.goPage(store.page+1)">▶</button>
+    </div>
+
+    <footer class="search-footer">
+      <a href="https://space.bilibili.com/544689323" target="_blank">B站 @九月沉</a><span class="sep">|</span>
+      <a href="https://github.com/Cold-Dream-Dust/BiliBiliMusicLib" target="_blank">GitHub</a>
+    </footer>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import VideoCard from '../components/VideoCard.vue'
 import { useSearchStore } from '../stores/search'
 import { useDownloadStore } from '../stores/download'
 
 const store = useSearchStore()
 const downloadStore = useDownloadStore()
-const inputQuery = ref(store.query || '')
+const inputQuery = ref(store.query||'')
+const upQuery = ref('')
+const showSettings = ref(false)
+const searchOpts = reactive({sortBy:store.sortBy||'relevance',order:store.order||'desc',upFilter:false})
 
-// 如果已有搜索结果，恢复输入框
-onMounted(() => {
-  if (store.query) inputQuery.value = store.query
+const pageButtons = computed(()=>{
+  const c=store.page, t=Math.max(store.totalPages,1)
+  let s=Math.max(1,c-4), e=Math.min(t,c+4)
+  const w=e-s+1
+  if(w<9){if(s===1)e=Math.min(t,s+8);else s=Math.max(1,e-8)}
+  const a=[];for(let i=s;i<=e;i++)a.push(i)
+  return a
 })
 
-function doSearch() {
-  store.doSearch(inputQuery.value)
+onMounted(()=>{if(store.query)inputQuery.value=store.query})
+
+function doSearch(){
+  let q=inputQuery.value.trim()
+  if(searchOpts.upFilter&&upQuery.value.trim()) q=upQuery.value.trim()+' '+q
+  store.sortBy=searchOpts.sortBy; store.order=searchOpts.order
+  store.doSearch(q,1)
 }
 
-function quickDownload(video) {
-  downloadStore.addTask(video)
-}
+function quickDownload(video){downloadStore.addTask(video)}
 </script>
 
 <style scoped>
-.search-view {
-  max-width: 1200px;
-  margin: 0 auto;
-}
-
-.search-header {
-  display: flex;
-  gap: 10px;
-  margin-bottom: 24px;
-}
-
-.search-input {
-  flex: 1;
-  padding: 12px 18px;
-  font-size: 1rem;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--bg-secondary);
-  color: var(--text-primary);
-  outline: none;
-  transition: border-color 0.2s;
-}
-
-.search-input:focus {
-  border-color: var(--accent);
-}
-
-/* ── 翻页 ── */
-.pager {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 16px;
-  padding: 12px 0;
-}
-
-.top-pager {
-  margin-bottom: 16px;
-  border-bottom: 1px solid var(--border);
-}
-
-.bottom-pager {
-  margin-top: 24px;
-  border-top: 1px solid var(--border);
-}
-
-.page-info {
-  color: var(--text-secondary);
-  font-size: 0.9rem;
-  min-width: 60px;
-  text-align: center;
-}
-
-.results-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-  gap: 16px;
-}
-
-.loading, .empty {
-  text-align: center;
-  color: var(--text-secondary);
-  padding: 60px 0;
-  font-size: 1.1rem;
-}
-
-.btn {
-  padding: 10px 20px;
-  border: none;
-  border-radius: var(--radius);
-  font-size: 0.95rem;
-  cursor: pointer;
-  transition: all 0.2s;
-  white-space: nowrap;
-}
-
-.btn-primary {
-  background: var(--accent);
-  color: #fff;
-}
-
-.btn-primary:hover {
-  background: var(--accent-hover);
-}
-
-.btn-secondary {
-  background: var(--bg-card);
-  color: var(--text-primary);
-  border: 1px solid var(--border);
-}
-
-.btn-secondary:hover {
-  background: var(--bg-hover);
-}
-
-.btn-page {
-  background: var(--bg-card);
-  color: var(--text-primary);
-  border: 1px solid var(--border);
-  padding: 8px 18px;
-  border-radius: var(--radius);
-  font-size: 0.9rem;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.btn-page:hover:not(:disabled) {
-  background: var(--accent);
-  border-color: var(--accent);
-}
-
-.btn-page:disabled {
-  opacity: 0.35;
-  cursor: not-allowed;
-}
+.search-page{max-width:1400px;margin:0 auto}
+.search-header{display:flex;gap:8px;margin-bottom:12px;align-items:center;flex-wrap:wrap}
+.search-input{flex:1;min-width:180px;padding:10px 14px;font-size:.95rem;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg-secondary);color:var(--text-primary);outline:none}
+.search-input:focus{border-color:var(--accent)}
+.up-input{flex:0 0 180px;min-width:120px}
+.sep{color:var(--text-secondary);font-weight:700}
+.search-settings-panel{display:flex;gap:24px;padding:10px 16px;margin-bottom:10px;background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);flex-wrap:wrap}
+.setting-row{display:flex;align-items:center;gap:8px}
+.setting-row label{font-size:.9rem;color:var(--text-secondary);white-space:nowrap;cursor:pointer}
+.setting-row select{padding:4px 8px;border:1px solid var(--border);border-radius:4px;background:var(--bg-secondary);color:var(--text-primary);font-size:.85rem}
+.hint{font-size:.8rem;color:var(--text-secondary)}
+.pager-row{display:flex;align-items:center;justify-content:center;gap:4px;padding:10px 0}
+.btn-page,.btn-page-num{padding:6px 12px;border:1px solid var(--border);border-radius:4px;background:var(--bg-card);color:var(--text-primary);font-size:.85rem;cursor:pointer;transition:all .15s}
+.btn-page:hover:not(:disabled),.btn-page-num:hover{background:var(--bg-hover)}
+.btn-page-num.current{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn-page:disabled{opacity:.3;cursor:not-allowed}
+.search-body{display:flex;gap:16px}
+.results-area{flex:1;min-width:0}
+.results-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:12px}
+@media(max-width:1200px){.results-grid{grid-template-columns:repeat(4,1fr)}}
+@media(max-width:900px){.results-grid{grid-template-columns:repeat(3,1fr)}}
+.loading,.empty{text-align:center;color:var(--text-secondary);padding:60px 0;font-size:1.1rem}
+.search-footer{display:flex;justify-content:center;gap:10px;padding:20px 0 10px;font-size:.85rem;color:var(--text-secondary);border-top:1px solid var(--border);margin-top:20px}
+.search-footer a{color:var(--accent);text-decoration:none}
+.search-footer a:hover{text-decoration:underline}
+.btn{padding:10px 18px;border:none;border-radius:var(--radius);font-size:.9rem;cursor:pointer;transition:all .2s;white-space:nowrap}
+.btn-primary{background:var(--accent);color:#fff}
+.btn-primary:hover{background:var(--accent-hover)}
+.btn-secondary{background:var(--bg-card);color:var(--text-primary);border:1px solid var(--border)}
+.btn-secondary:hover{background:var(--bg-hover)}
+.btn-secondary.active{border-color:var(--accent);color:var(--accent)}
 </style>

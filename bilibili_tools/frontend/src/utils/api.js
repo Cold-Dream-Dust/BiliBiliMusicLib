@@ -9,9 +9,9 @@ const api = axios.create({
 })
 
 // ── 搜索 ──────────────────────────────
-export async function searchBilibili(q, page = 1, sortBy = 'relevance') {
+export async function searchBilibili(q, page = 1, sortBy = 'relevance', order = 'desc') {
   const { data } = await api.get('/search', {
-    params: { q, page, sort_by: sortBy },
+    params: { q, page, sort_by: sortBy, order },
   })
   return data
 }

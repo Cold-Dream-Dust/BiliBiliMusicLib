@@ -16,13 +16,18 @@ import platform
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, FileResponse
 
 from models.schemas import DownloadRequest
 from services import download_service as ds
 from config import settings
 
 router = APIRouter()
+
+# ── 启动时加载持久化任务 ──
+@router.on_event("startup")
+async def load_persisted_tasks():
+    ds.load_tasks()
 
 
 @router.post("/download")
@@ -136,3 +141,19 @@ async def open_folder(task_id: str):
         raise HTTPException(status_code=500, detail=f"无法打开文件夹: {e}")
 
     return {"status": "opened", "folder": folder}
+
+
+@router.get("/file/{task_id}")
+async def serve_file(task_id: str):
+    """用系统默认程序打开文件（模拟双击）"""
+    task = ds.get_task(task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="任务不存在")
+    fp = task.get("file_path", "")
+    if not fp or not os.path.exists(fp):
+        raise HTTPException(status_code=404, detail="文件不存在")
+    try:
+        os.startfile(fp)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"无法打开文件: {e}")
+    return {"status": "opened", "file": os.path.basename(fp)}

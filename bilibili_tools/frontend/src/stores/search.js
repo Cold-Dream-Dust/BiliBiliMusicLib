@@ -14,6 +14,9 @@ export const useSearchStore = defineStore('search', () => {
   const total = ref(0)
   const hasMore = ref(false)
 
+  const sortBy = ref('relevance')
+  const order = ref('desc')
+
   const totalPages = computed(() => Math.ceil(total.value / 20))
 
   async function doSearch(q, p = 1) {
@@ -23,7 +26,7 @@ export const useSearchStore = defineStore('search', () => {
     searched.value = true
     page.value = p
     try {
-      const data = await searchBilibili(q, p)
+      const data = await searchBilibili(q, p, sortBy.value, order.value)
       results.value = data.items || []
       total.value = data.total || 0
       hasMore.value = data.has_more || false
@@ -41,5 +44,5 @@ export const useSearchStore = defineStore('search', () => {
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
-  return { query, results, loading, searched, page, total, totalPages, hasMore, doSearch, goPage }
+  return { query, results, loading, searched, page, total, totalPages, hasMore, sortBy, order, doSearch, goPage }
 })
