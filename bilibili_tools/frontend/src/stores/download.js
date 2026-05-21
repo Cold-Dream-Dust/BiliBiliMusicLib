@@ -3,7 +3,7 @@
  */
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import { submitDownload, api } from '../utils/api'
+import { submitDownload, retryDownload, api } from '../utils/api'
 
 let taskIdCounter = 0
 let pollTimer = null
@@ -46,10 +46,15 @@ export const useDownloadStore = defineStore('download', () => {
 
     // 调用后端提交下载
     try {
-      const result = await submitDownload(video.bvid)
+      const result = await submitDownload(video.bvid, video.title)
       task.serverId = result.task_id
-      task.status = 'active'
-      startPolling()
+      if (result.file_exists) {
+        task.status = 'failed'
+        task.error = '本地文件已存在'
+      } else {
+        task.status = 'active'
+        startPolling()
+      }
     } catch (e) {
       task.status = 'failed'
       task.error = e.response?.data?.detail || '提交下载失败'
@@ -57,6 +62,25 @@ export const useDownloadStore = defineStore('download', () => {
       if (task.error.includes('Cookie') || task.error.includes('cookie')) {
         task.error += ' — 点击上方「设置」填写 B站 Cookie'
       }
+    }
+  }
+
+  /** 重试下载：删除本地文件后重新下载 */
+  async function retryTask(taskId) {
+    const task = tasks.value.find(t => t.id === taskId)
+    if (!task) return
+    task.status = 'submitting'
+    task.progress = 0
+    task.error = ''
+    try {
+      const result = await retryDownload(task.serverId)
+      // 更新 serverId 为新任务
+      task.serverId = result.task_id
+      task.status = 'active'
+      startPolling()
+    } catch (e) {
+      task.status = 'failed'
+      task.error = e.response?.data?.detail || '重试失败'
     }
   }
 
@@ -178,6 +202,7 @@ export const useDownloadStore = defineStore('download', () => {
     doneTasks,
     failedTasks,
     addTask,
+    retryTask,
     pauseTask,
     resumeTask,
     cancelTask,

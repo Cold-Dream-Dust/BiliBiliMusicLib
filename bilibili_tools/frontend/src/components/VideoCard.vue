@@ -1,6 +1,10 @@
 <template>
-  <div class="video-card">
-    <div class="card-cover" @click="$emit('click')">
+  <div :class="['video-card', { 'multi-mode': showCheckbox, selected: checked }]" @click="onCardClick">
+    <!-- 多选复选框（右上角） -->
+    <div v-if="showCheckbox" class="card-checkbox" @click.stop="toggleCheck">
+      <span :class="['check-mark', { on: checked }]">{{ checked ? '☑' : '☐' }}</span>
+    </div>
+    <div class="card-cover" @click.stop="showCheckbox ? toggleCheck() : $emit('click')">
       <img
         :src="coverUrl"
         :alt="video.title"
@@ -42,8 +46,10 @@ import { proxyImageUrl } from '../utils/api'
 const props = defineProps({
   video: { type: Object, required: true },
   isFavorited: { type: Boolean, default: false },
+  showCheckbox: { type: Boolean, default: false },
+  checked: { type: Boolean, default: false },
 })
-const emit = defineEmits(['download', 'click', 'favorite'])
+const emit = defineEmits(['download', 'click', 'favorite', 'update:checked'])
 
 const coverUrl = computed(() => proxyImageUrl(props.video.pic || props.video.cover))
 const btnClicked = ref(false)
@@ -61,6 +67,16 @@ function handleFavorite() {
   favClicked.value = true
   emit('favorite', props.video)
   setTimeout(() => { favClicked.value = false }, 1200)
+}
+
+function toggleCheck() {
+  emit('update:checked', !props.checked)
+}
+
+function onCardClick() {
+  if (props.showCheckbox) {
+    toggleCheck()
+  }
 }
 
 function formatDuration(sec) {
@@ -223,5 +239,35 @@ function formatCount(n) {
 .fav-btn:hover {
   background: rgba(0,0,0,0.75);
   transform: scale(1.15);
+}
+
+/* ── 多选复选框 ── */
+.video-card.multi-mode { cursor: default; }
+.video-card.selected { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); }
+
+.card-checkbox {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 5;
+  cursor: pointer;
+}
+
+.check-mark {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 4px;
+  background: rgba(0,0,0,0.55);
+  color: #ccc;
+  font-size: 1.2rem;
+  transition: all 0.15s;
+}
+
+.check-mark.on {
+  background: var(--accent);
+  color: #fff;
 }
 </style>

@@ -83,8 +83,10 @@ class VideoDetail(BaseModel):
 
 class DownloadRequest(BaseModel):
     bvid: str
+    title: str = ""                      # 视频标题，用于生成文件名
     type: Optional[DownloadType] = None  # None 时使用 settings 默认值
     format: Optional[str] = None         # 不传则用设置中的默认格式
+    force: bool = False                  # 为 True 时强制重新下载并覆盖本地文件
 
 
 class DownloadTask(BaseModel):

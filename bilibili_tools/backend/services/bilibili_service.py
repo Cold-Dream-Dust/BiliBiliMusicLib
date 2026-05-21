@@ -1,35 +1,30 @@
 """
 B站服务 — 搜索、视频信息获取
-
-复用并扩展 bilibili_downloader.py 中的 API 调用逻辑。
 """
 
 from __future__ import annotations
 
 import hashlib
 import time
-import urllib.parse
 from typing import Optional
 
 import httpx
 
+from core.http_client import (
+    bilibili_headers,
+    search_client,
+)
+
 # B站 API 基础配置
 BILIBILI_SEARCH_API = "https://api.bilibili.com/x/web-interface/wbi/search/type"
 BILIBILI_VIDEO_INFO_API = "https://api.bilibili.com/x/web-interface/view"
-BILIBILI_USER_AGENT = (
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-    "AppleWebKit/537.36 (KHTML, like Gecko) "
-    "Chrome/120.0.0.0 Safari/537.36"
-)
 
 # WBI 签名相关（B站搜索接口需要）
 WBI_MIXIN_KEY = "ea1db124af3c7062474693fa704f4ff8"  # 可能会变，需要定期更新
 
 
 def _wbi_sign(params: dict) -> dict:
-    """为请求参数添加 WBI 签名（简化版）"""
-    # 注意：完整 WBI 签名需要从 nav 接口获取 img_key 和 sub_key
-    # 这里使用简化版本，大多数情况下可工作
+    """为请求参数添加 WBI 签名"""
     params["wts"] = int(time.time())
     keys = sorted(params.keys())
     query_string = "&".join(f"{k}={params[k]}" for k in keys)
@@ -59,29 +54,23 @@ async def search_bilibili(
         "search_type": "video",
         "page": page,
         "page_size": page_size,
-        "order": "totalrank",  # 综合排序
+        "order": "totalrank",
     }
 
-    headers = {
-        "User-Agent": BILIBILI_USER_AGENT,
-        "Referer": "https://www.bilibili.com/",
-    }
-
-    # WBI 签名（B站搜索接口必需）
+    # WBI 签名
     params = _wbi_sign(params)
 
-    # 不使用系统代理（代理可能导致B站API连接失败）
-    async with httpx.AsyncClient(timeout=15, trust_env=False) as client:
+    async with search_client() as client:
         try:
             resp = await client.get(
                 BILIBILI_SEARCH_API,
                 params=params,
-                headers=headers,
+                headers=bilibili_headers(),
             )
             resp.raise_for_status()
             data = resp.json()
         except httpx.HTTPStatusError as e:
-            print(f"[BilibiliService] 搜索HTTP错误 {e.response.status_code}: {e.response.text[:200]}")
+            print(f"[BilibiliService] 搜索HTTP错误 {e.response.status_code}")
             return {"items": [], "total": 0, "has_more": False}
         except Exception as e:
             print(f"[BilibiliService] 搜索失败: {type(e).__name__}: {e}")
@@ -125,12 +114,9 @@ async def get_video_info(bvid: str) -> Optional[dict]:
         视频详情字典，或 None
     """
     params = {"bvid": bvid}
-    headers = {
-        "User-Agent": BILIBILI_USER_AGENT,
-        "Referer": f"https://www.bilibili.com/video/{bvid}",
-    }
+    headers = bilibili_headers({"Referer": f"https://www.bilibili.com/video/{bvid}"})
 
-    async with httpx.AsyncClient(timeout=15, trust_env=False) as client:
+    async with search_client() as client:
         try:
             resp = await client.get(
                 BILIBILI_VIDEO_INFO_API,

@@ -8,10 +8,10 @@ GET  /api/proxy/image    — 图片代理（绕过B站防盗链）
 
 from fastapi import APIRouter, Query, HTTPException
 from fastapi.responses import StreamingResponse
-import httpx
 
 from models.schemas import SearchResponse, VideoItem, VideoDetail, SortBy
-from services.bilibili_service import search_bilibili, get_video_info, BILIBILI_USER_AGENT
+from services.bilibili_service import search_bilibili, get_video_info
+from core.http_client import bilibili_headers, image_proxy_client
 from utils.sorting import sort_search_results
 
 router = APIRouter()
@@ -63,15 +63,10 @@ async def video_detail(bvid: str):
 async def proxy_image(url: str = Query(..., description="原始图片URL")):
     """
     图片代理 — 绕过B站防盗链（Referer 限制）
-    前端将封面图 URL 传入此端点，后端以正确 Referer 获取后返回
     """
-    headers = {
-        "User-Agent": BILIBILI_USER_AGENT,
-        "Referer": "https://www.bilibili.com/",
-    }
-    async with httpx.AsyncClient(timeout=15, trust_env=False) as client:
+    async with image_proxy_client() as client:
         try:
-            resp = await client.get(url, headers=headers)
+            resp = await client.get(url, headers=bilibili_headers())
             resp.raise_for_status()
         except Exception as e:
             raise HTTPException(status_code=404, detail=f"图片获取失败: {e}")

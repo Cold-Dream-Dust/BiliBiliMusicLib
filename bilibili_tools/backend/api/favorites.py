@@ -109,7 +109,7 @@ async def download_all(folder_id: str):
             skipped += 1
             continue
         try:
-            await ds.submit_download(bvid=bvid)
+            await ds.submit_download(bvid=bvid, title=item.get("title", ""), thumbnail=item.get("pic", ""))
             downloaded_or_active.add(bvid)
             submitted += 1
         except Exception as e:

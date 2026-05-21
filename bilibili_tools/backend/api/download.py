@@ -34,11 +34,14 @@ async def load_persisted_tasks():
 async def submit_download(req: DownloadRequest):
     """
     提交下载任务。使用默认设置时 type 和 format 可留空。
+    force=True 时忽略本地文件检测，强制重新下载。
     """
     task_id = await ds.submit_download(
         bvid=req.bvid,
+        title=req.title,
         download_type=req.type.value if req.type else None,
         fmt=req.format,
+        force=req.force,
     )
     task = ds.get_task(task_id)
     if not task:
@@ -46,6 +49,7 @@ async def submit_download(req: DownloadRequest):
     return {
         "task_id": task_id,
         "status": task["status"],
+        "file_exists": task.get("file_exists", False),
     }
 
 
@@ -86,6 +90,36 @@ async def prioritize_download(task_id: str):
     if not ds.prioritize_task(task_id):
         raise HTTPException(status_code=404, detail="任务不存在或无法优先")
     return {"status": "prioritized"}
+
+
+@router.post("/downloads/{task_id}/retry")
+async def retry_download(task_id: str):
+    """
+    失败/文件已存在的任务：删除本地文件后重新下载
+    """
+    task = ds.get_task(task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="任务不存在")
+
+    # 删除本地文件
+    local_file = task.get("file_path", "")
+    if local_file and os.path.exists(local_file):
+        try:
+            os.remove(local_file)
+            print(f"[DownloadService] 删除已存在的文件: {local_file}")
+        except Exception as e:
+            print(f"[DownloadService] 删除文件失败: {e}")
+
+    # 重新提交
+    new_task_id = await ds.submit_download(
+        bvid=task["bvid"],
+        title=task.get("title", ""),
+        thumbnail=task.get("thumbnail", ""),
+        download_type=task.get("download_type"),
+        fmt=task.get("format"),
+        force=True,
+    )
+    return {"task_id": new_task_id, "status": "retrying"}
 
 
 @router.get("/downloads/poll")

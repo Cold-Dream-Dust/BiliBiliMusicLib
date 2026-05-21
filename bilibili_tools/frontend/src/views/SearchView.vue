@@ -34,11 +34,36 @@
       <button class="btn btn-page" :disabled="!store.hasMore" @click="store.goPage(store.page+1)">▶</button>
     </div>
 
+    <!-- 多选工具栏 -->
+    <div v-if="store.results.length>0 && !store.loading" class="multi-toolbar">
+      <template v-if="!multiMode">
+        <button class="btn btn-outline" @click="enterMultiMode">☑ 开启多选</button>
+      </template>
+      <template v-else>
+        <span class="multi-count">已选 {{ selectedCount }} / {{ store.results.length }}</span>
+        <button class="btn btn-sm" @click="selectAll">全选</button>
+        <button class="btn btn-sm" @click="invertSelection">反选</button>
+        <button class="btn btn-sm btn-download" @click="batchDownload" :disabled="selectedCount===0">⬇ 下载已选取</button>
+        <button class="btn btn-sm btn-fav" @click="batchFavorite" :disabled="selectedCount===0">⭐ 收藏已选取</button>
+        <button class="btn btn-sm btn-cancel" @click="exitMultiMode">✕ 取消</button>
+      </template>
+    </div>
+
     <div class="search-body">
       <div class="results-area">
         <div v-if="store.loading" class="loading">搜索中...</div>
         <div v-else-if="store.results.length>0" class="results-grid">
-          <VideoCard v-for="v in store.results" :key="v.bvid" :video="v" :isFavorited="favStore.isBvidFavorited(v.bvid)" @download="quickDownload" @favorite="openFavPicker" />
+          <VideoCard
+            v-for="v in store.results"
+            :key="v.bvid"
+            :video="v"
+            :isFavorited="favStore.isBvidFavorited(v.bvid)"
+            :showCheckbox="multiMode"
+            :checked="selectedBvids.has(v.bvid)"
+            @update:checked="(val) => toggleBvid(v.bvid, val)"
+            @download="quickDownload"
+            @favorite="openFavPicker"
+          />
         </div>
         <div v-else-if="store.searched" class="empty">未找到相关结果</div>
       </div>
@@ -114,6 +139,12 @@ const favStore = useFavoritesStore()
 const inputQuery = ref(store.query||'')
 const upQuery = ref('')
 const showSettings = ref(false)
+const multiMode = ref(false)
+const selectedBvids = ref(new Set())
+const batchSaving = ref(false)
+
+const selectedCount = computed(() => selectedBvids.value.size)
+
 const searchOpts = reactive({sortBy:store.sortBy||'relevance',order:store.order||'desc',upFilter:false})
 
 const pageButtons = computed(()=>{
@@ -138,6 +169,62 @@ function doSearch(){
 }
 
 function quickDownload(video){downloadStore.addTask(video)}
+
+// ── 多选逻辑 ──
+function enterMultiMode() { multiMode.value = true; selectedBvids.value = new Set() }
+function exitMultiMode() { multiMode.value = false; selectedBvids.value = new Set() }
+function toggleBvid(bvid, val) {
+  const s = new Set(selectedBvids.value)
+  if (val) s.add(bvid); else s.delete(bvid)
+  selectedBvids.value = s
+}
+function selectAll() {
+  selectedBvids.value = new Set(store.results.map(v => v.bvid))
+}
+function invertSelection() {
+  const all = new Set(store.results.map(v => v.bvid))
+  const s = new Set()
+  for (const bvid of all) { if (!selectedBvids.value.has(bvid)) s.add(bvid) }
+  selectedBvids.value = s
+}
+
+function getSelectedVideos() {
+  return store.results.filter(v => selectedBvids.value.has(v.bvid))
+}
+
+async function batchDownload() {
+  const vids = getSelectedVideos()
+  if (!vids.length) return
+  for (const v of vids) {
+    await downloadStore.addTask(v)
+    await new Promise(r => setTimeout(r, 200)) // 小延迟避免请求过快
+  }
+  showFavToast(`已提交 ${vids.length} 个下载任务`)
+  exitMultiMode()
+}
+
+async function batchFavorite() {
+  const vids = getSelectedVideos()
+  if (!vids.length || batchSaving.value) return
+  batchSaving.value = true
+  favStore.fetchFolders()
+  try {
+    // 尝试收藏到已有收藏夹，如果没有则创建
+    let targetFolder = favStore.folders[0]
+    if (!targetFolder) {
+      targetFolder = await favStore.createFolder('默认收藏')
+    }
+    for (const v of vids) {
+      try { await favStore.addItem(targetFolder.id, v) } catch(e) { /* skip dupes */ }
+    }
+    showFavToast(`已收藏 ${vids.length} 个视频到「${targetFolder.name}」`)
+  } catch (e) {
+    showFavToast('批量收藏失败', 'error')
+  } finally {
+    batchSaving.value = false
+    exitMultiMode()
+  }
+}
 
 // ── 收藏夹选择 ──
 const favPicker = reactive({
@@ -228,6 +315,48 @@ function showFavToast(msg, type = 'success') {
 .btn-secondary{background:var(--bg-card);color:var(--text-primary);border:1px solid var(--border)}
 .btn-secondary:hover{background:var(--bg-hover)}
 .btn-secondary.active{border-color:var(--accent);color:var(--accent)}
+
+/* ── 多选工具栏 ── */
+.multi-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  margin-bottom: 10px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  flex-wrap: wrap;
+}
+.multi-count { font-size: .85rem; color: var(--accent); font-weight: 500; margin-right: 4px; }
+.btn-sm {
+  padding: 6px 14px;
+  font-size: .82rem;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all .15s;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+}
+.btn-sm:hover:not(:disabled) { background: var(--bg-hover); }
+.btn-sm:disabled { opacity: .4; cursor: not-allowed; }
+.btn-outline {
+  padding: 6px 16px;
+  font-size: .85rem;
+  border: 1px dashed var(--accent);
+  border-radius: 6px;
+  cursor: pointer;
+  background: transparent;
+  color: var(--accent);
+  transition: all .15s;
+}
+.btn-outline:hover { background: rgba(0,161,214,0.1); }
+.btn-sm.btn-download { background: var(--accent); color: #fff; }
+.btn-sm.btn-download:hover:not(:disabled) { background: var(--accent-hover); }
+.btn-sm.btn-fav { background: #ffc107; color: #000; }
+.btn-sm.btn-fav:hover:not(:disabled) { background: #e6a800; }
+.btn-sm.btn-cancel { color: var(--danger); }
 
 /* ── 收藏弹窗 ── */
 .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.6);display:flex;align-items:center;justify-content:center;z-index:100}

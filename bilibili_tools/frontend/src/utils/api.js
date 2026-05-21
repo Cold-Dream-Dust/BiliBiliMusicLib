@@ -22,11 +22,17 @@ export async function getVideoInfo(bvid) {
 }
 
 // ── 下载 ──────────────────────────────
-export async function submitDownload(bvid, type = null, format = null) {
-  const body = { bvid }
+export async function submitDownload(bvid, title = '', type = null, format = null, force = false) {
+  const body = { bvid, title }
   if (type) body.type = type
   if (format) body.format = format
+  if (force) body.force = true
   const { data } = await api.post('/download', body)
+  return data
+}
+
+export async function retryDownload(taskId) {
+  const { data } = await api.post(`/downloads/${taskId}/retry`)
   return data
 }
 

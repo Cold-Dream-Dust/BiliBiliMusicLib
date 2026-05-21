@@ -56,6 +56,7 @@
 
       <!-- 失败 -->
       <template v-else-if="task.status === 'failed'">
+        <button class="action-btn retry-btn" @click="$emit('retry')" title="仍要下载（删除本地文件后重新下载）">↻ 仍要下载</button>
         <button class="action-btn danger" @click="$emit('remove')" title="删除">🗑</button>
       </template>
 
@@ -77,7 +78,7 @@ import { proxyImageUrl } from '../utils/api'
 const props = defineProps({
   task: { type: Object, required: true },
 })
-defineEmits(['pause', 'resume', 'cancel', 'prioritize', 'remove', 'open-file', 'open-folder'])
+defineEmits(['pause', 'resume', 'cancel', 'prioritize', 'remove', 'open-file', 'open-folder', 'retry'])
 
 const thumbUrl = computed(() => proxyImageUrl(props.task.thumbnail || props.task.pic))
 </script>
@@ -219,4 +220,23 @@ const thumbUrl = computed(() => proxyImageUrl(props.task.thumbnail || props.task
   border-color: var(--danger);
   color: #fff;
 }
+
+.retry-btn {
+  width: auto;
+  padding: 0 10px;
+  font-size: 0.78rem;
+  background: var(--warning);
+  color: #000;
+  white-space: nowrap;
+  gap: 4px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+}
+
+.retry-btn:hover { background: #e6a800; }
 </style>

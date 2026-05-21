@@ -1,7 +1,5 @@
 """
 下载服务 — HTTP 直抓 B站 playinfo + 流式下载
-
-完全替代 yt-dlp，通过请求视频页解析 __playinfo__ 获取音视频直链。
 """
 
 from __future__ import annotations
@@ -18,6 +16,12 @@ from typing import Optional
 import httpx
 
 from config import settings
+from core.http_client import (
+    BILIBILI_UA,
+    bilibili_headers,
+    download_page_client,
+    download_stream_client,
+)
 
 
 # ── 任务存储 ──────────────────────────────────────────
@@ -57,13 +61,6 @@ def load_tasks():
     except Exception as e:
         print(f"[DownloadService] 加载任务失败: {e}")
 
-BILIBILI_UA = (
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-    "AppleWebKit/537.36 (KHTML, like Gecko) "
-    "Chrome/120.0.0.0 Safari/537.36"
-)
-
-
 def _get_semaphore() -> asyncio.Semaphore:
     global _semaphore
     if _semaphore is None:
@@ -97,15 +94,12 @@ def _build_cookie_header() -> str:
 async def _fetch_playinfo(bvid: str) -> Optional[dict]:
     """请求B站视频页，提取 __playinfo__ JSON"""
     url = f"https://www.bilibili.com/video/{bvid}"
-    headers = {
-        "User-Agent": BILIBILI_UA,
-        "Referer": "https://www.bilibili.com/",
-    }
+    headers = bilibili_headers()
     cookie = _build_cookie_header()
     if cookie:
         headers["Cookie"] = cookie
 
-    async with httpx.AsyncClient(timeout=20, follow_redirects=True, trust_env=False) as client:
+    async with download_page_client() as client:
         try:
             resp = await client.get(url, headers=headers)
             resp.raise_for_status()
@@ -153,11 +147,8 @@ def _pick_best_video(playinfo: dict) -> Optional[str]:
 
 async def _download_stream(url: str, output_path: str, task: dict) -> bool:
     """流式下载单个文件，实时更新进度"""
-    headers = {
-        "User-Agent": BILIBILI_UA,
-        "Referer": "https://www.bilibili.com/",
-    }
-    async with httpx.AsyncClient(timeout=300, follow_redirects=True, trust_env=False) as client:
+    headers = bilibili_headers()
+    async with download_stream_client() as client:
         try:
             async with client.stream("GET", url, headers=headers) as resp:
                 resp.raise_for_status()
@@ -204,20 +195,32 @@ async def submit_download(
     thumbnail: str = "",
     download_type: Optional[str] = None,
     fmt: Optional[str] = None,
+    force: bool = False,  # 为 True 时忽略本地文件检测，强制下载
 ) -> str:
     task_id = str(uuid.uuid4())[:8]
     dl_type = download_type or settings.download_type
     out_fmt = fmt or (settings.audio_format if dl_type == "audio" else settings.video_format)
 
+    # 用标题做文件名：优先提取《》内文本，否则用原标题
+    raw_title = extract_music_title(title or bvid)
+    safe_title = _sanitize_filename(raw_title)
+
+    # 检测本地文件是否已存在
+    output_dir = Path(settings.download_dir)
+    expected_file = str(output_dir / f"{safe_title}.{out_fmt}")
+    file_exists = os.path.exists(expected_file)
+
     task = {
         "id": task_id,
         "bvid": bvid,
         "title": title or bvid,
+        "raw_title": raw_title,
+        "safe_title": safe_title,
         "thumbnail": thumbnail,
         "status": "pending",
         "progress": 0,
         "speed": "",
-        "file_path": "",
+        "file_path": expected_file if file_exists else "",
         "error": "",
         "queue_position": 0,
         "created_at": str(time.time()),
@@ -225,9 +228,21 @@ async def submit_download(
         "download_type": dl_type,
         "format": out_fmt,
         "paused": False,
+        "file_exists": file_exists,
+        "force": force,
     }
     _tasks[task_id] = task
     save_tasks()
+
+    if file_exists and not force:
+        # 文件已存在 — 直接标记为失败，前端可点击"仍要下载"
+        task["status"] = "failed"
+        task["error"] = f"本地文件已存在: {safe_title}.{out_fmt}"
+        task["progress"] = 0
+        save_tasks()
+        print(f"[DownloadService] 文件已存在，跳过: {safe_title}.{out_fmt}")
+        return task_id
+
     asyncio.create_task(_run_download(task_id))
     return task_id
 
@@ -245,7 +260,7 @@ async def _run_download(task_id: str) -> None:
         task["error"] = ""
         task["paused"] = False
 
-        safe_title = _sanitize_filename(task["title"])
+        safe_title = task.get("safe_title") or _sanitize_filename(task["title"])
         output_dir = Path(settings.download_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
         output_base = str(output_dir / safe_title)
@@ -403,3 +418,18 @@ def _sanitize_filename(name: str) -> str:
     if len(name) > 80:
         name = name[:77] + "..."
     return name
+
+
+def extract_music_title(title: str) -> str:
+    """
+    从标题中提取《》内的文本作为文件名。
+    只取第一个匹配，没有则返回原标题。
+    例: 「【AI翻唱】周杰伦《晴天》完整版」 → 「晴天」
+    """
+    import re
+    m = re.search(r'《([^》]+)》', title)
+    if m:
+        content = m.group(1).strip()
+        if content:
+            return content
+    return title

@@ -30,6 +30,7 @@
         @remove="downloadStore.removeTask(task.id)"
         @open-file="downloadStore.openFile(task)"
         @open-folder="downloadStore.openFolder(task)"
+        @retry="downloadStore.retryTask(task.id)"
       />
     </div>
   </div>
